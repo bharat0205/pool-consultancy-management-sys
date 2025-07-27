@@ -2,16 +2,17 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
 function AdminDashboard() {
+  // All state variables for all features
   const [consultants, setConsultants] = useState([]);
-  // --- NEW CODE STARTS HERE ---
-  // Create state variables to hold the data from our new form fields
-  const [newConsultant, setNewConsultant] = useState({
-    name: '',
-    email: '',
-    skills: ''
-  });
+  const [newConsultant, setNewConsultant] = useState({ name: '', email: '', skills: '' });
+  const [resumeFile, setResumeFile] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
 
-  // This function will fetch consultants. We'll call it to refresh the list.
+  // --- All Functions for All Features ---
+
+  // Fetches the full list of consultants for the main table
   const fetchConsultants = async () => {
     try {
       const response = await axios.get('http://127.0.0.1:5000/api/consultants');
@@ -21,33 +22,67 @@ function AdminDashboard() {
     }
   };
 
-  // This function updates our state variables as the user types in the form
+  // Handles text input changes for the "Add Consultant" form
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setNewConsultant({ ...newConsultant, [name]: value });
   };
 
-  // This function runs when the form is submitted
+  // Handles file selection for the "Add Consultant" form
+  const handleFileChange = (e) => {
+    setResumeFile(e.target.files[0]);
+  };
+
+  // Handles submitting the "Add Consultant" form
   const handleSubmit = async (e) => {
-    e.preventDefault(); // Prevents the browser from reloading the page
+    e.preventDefault();
+    if (!resumeFile) {
+      alert("Please select a resume file to upload.");
+      return;
+    }
+    const formData = new FormData();
+    formData.append('name', newConsultant.name);
+    formData.append('email', newConsultant.email);
+    formData.append('skills', newConsultant.skills);
+    formData.append('resume', resumeFile);
+
     try {
-      // Send the new consultant data to our backend's POST endpoint
-      await axios.post('http://127.0.0.1:5000/api/consultants', newConsultant);
-      // After a successful submission, fetch the updated list of consultants
-      fetchConsultants();
-      // Clear the form fields
+      await axios.post('http://127.0.0.1:5000/api/consultants', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      fetchConsultants(); // Refresh the main table
       setNewConsultant({ name: '', email: '', skills: '' });
+      setResumeFile(null);
+      e.target.reset();
     } catch (error) {
       console.error("Error adding consultant:", error);
     }
   };
-  // --- NEW CODE ENDS HERE ---
 
+  // Handles submitting the AI search query
+  const handleSearch = async (e) => {
+    e.preventDefault();
+    if (!searchQuery.trim()) return;
+
+    setIsSearching(true);
+    setSearchResults([]);
+    try {
+      const response = await axios.post('http://127.0.0.1:5000/api/search', { query: searchQuery });
+      setSearchResults(response.data);
+    } catch (error)
+    {
+      console.error("Error during AI search:", error);
+      alert("Search failed. Please check the console for details.");
+    }
+    setIsSearching(false);
+  };
+
+  // Runs once on page load to get the initial consultant list
   useEffect(() => {
-    fetchConsultants(); // Fetch the initial list when the page loads
+    fetchConsultants();
   }, []);
 
-  // Styling (no changes here)
+  // --- Styling Objects (no change) ---
   const tableStyle = { width: '100%', borderCollapse: 'collapse', marginTop: '20px' };
   const thTdStyle = { border: '1px solid #ddd', padding: '8px', textAlign: 'left' };
   const thStyle = { ...thTdStyle, backgroundColor: '#f2f2f2', fontWeight: 'bold' };
@@ -55,51 +90,63 @@ function AdminDashboard() {
   return (
     <div>
       <h1>Admin Dashboard</h1>
-      <p>Here you can view and manage all consultants.</p>
+      <p>Manage consultants and find the best candidates using the AI Resume Matcher.</p>
 
-      {/* --- NEW FORM STARTS HERE --- */}
+      {/* --- SECTION 1: Add a New Consultant Form --- */}
       <div style={{ border: '1px solid #ccc', padding: '20px', borderRadius: '5px', marginBottom: '20px' }}>
         <h2>Add a New Consultant</h2>
         <form onSubmit={handleSubmit}>
           <div style={{ marginBottom: '10px' }}>
             <label>Name: </label>
-            <input
-              type="text"
-              name="name"
-              value={newConsultant.name}
-              onChange={handleInputChange}
-              required
-              style={{ width: '300px', padding: '5px' }}
-            />
+            <input type="text" name="name" value={newConsultant.name} onChange={handleInputChange} required style={{ width: '300px', padding: '5px' }} />
           </div>
           <div style={{ marginBottom: '10px' }}>
             <label>Email: </label>
-            <input
-              type="email"
-              name="email"
-              value={newConsultant.email}
-              onChange={handleInputChange}
-              required
-              style={{ width: '300px', padding: '5px' }}
-            />
+            <input type="email" name="email" value={newConsultant.email} onChange={handleInputChange} required style={{ width: '300px', padding: '5px' }} />
           </div>
           <div style={{ marginBottom: '10px' }}>
             <label>Skills: </label>
-            <input
-              type="text"
-              name="skills"
-              value={newConsultant.skills}
-              onChange={handleInputChange}
-              required
-              style={{ width: '300px', padding: '5px' }}
-            />
+            <input type="text" name="skills" value={newConsultant.skills} onChange={handleInputChange} required style={{ width: '300px', padding: '5px' }} />
+          </div>
+          <div style={{ marginBottom: '10px' }}>
+            <label>Resume (PDF): </label>
+            <input type="file" name="resume" onChange={handleFileChange} accept=".pdf" required />
           </div>
           <button type="submit" style={{ padding: '10px 20px' }}>Add Consultant</button>
         </form>
       </div>
-      {/* --- NEW FORM ENDS HERE --- */}
 
-      {/* The table of consultants remains the same */}
+      {/* --- SECTION 2: AI Resume Matcher --- */}
+      <div style={{ border: '1px solid #007bff', padding: '20px', borderRadius: '5px', marginBottom: '20px' }}>
+        <h2>AI Resume Matcher</h2>
+        <form onSubmit={handleSearch}>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="e.g., Senior Java developer with Spring Boot"
+            required
+            style={{ width: '500px', padding: '10px' }}
+          />
+          <button type="submit" style={{ padding: '10px 20px', marginLeft: '10px' }} disabled={isSearching}>
+            {isSearching ? 'Searching...' : 'Find Best Match'}
+          </button>
+        </form>
+        {searchResults.length > 0 && (
+          <div style={{ marginTop: '20px' }}>
+            <h3>Search Results (Best match first):</h3>
+            {searchResults.map((result) => (
+              <div key={result.consultant.id} style={{ border: '1px solid #ddd', padding: '10px', marginBottom: '10px' }}>
+                <h4>{result.consultant.name} (Match Score: {result.score})</h4>
+                <p><strong>Skills:</strong> {result.consultant.skills}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* --- SECTION 3: All Consultants Table --- */}
+      <h2>All Consultants</h2>
       <table style={tableStyle}>
         <thead>
           <tr>

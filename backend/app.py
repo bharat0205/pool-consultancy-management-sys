@@ -1,47 +1,67 @@
+import os
 import sqlite3
-# We need to import 'request' to handle incoming data
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+from werkzeug.utils import secure_filename
+# --- NEW: Import our agent ---
+from resume_agent import ResumeAgent
 
 app = Flask(__name__)
 CORS(app)
 
+# --- Configuration (no change) ---
+UPLOAD_FOLDER = 'uploads'
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+# --- NEW: Create an instance of our agent when the server starts ---
+resume_agent = ResumeAgent()
+
+# --- Database Functions (no change) ---
 def get_db_connection():
     conn = sqlite3.connect('consultants.db')
     conn.row_factory = sqlite3.Row
     return conn
 
-# This endpoint for GETTING all consultants remains the same
+# --- Existing API Endpoints (no change) ---
 @app.route('/api/consultants', methods=['GET'])
 def get_consultants():
+    # ... This code is the same as your old file
     conn = get_db_connection()
     consultants_query = conn.execute('SELECT * FROM consultants').fetchall()
     conn.close()
     consultants = [dict(row) for row in consultants_query]
     return jsonify(consultants)
 
-# --- NEW CODE STARTS HERE ---
-# This is our new endpoint for ADDING a consultant.
-# Note that it uses the same URL but handles the 'POST' method.
 @app.route('/api/consultants', methods=['POST'])
 def add_consultant():
-    # Get the data sent from the frontend form
-    new_consultant = request.get_json()
-    name = new_consultant['name']
-    email = new_consultant['email']
-    skills = new_consultant['skills']
+    # ... This code is the same as your old file
+    if 'resume' not in request.files:
+        return jsonify({'error': 'No resume file part'}), 400
+    file = request.files['resume']
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
+    name = request.form['name']
+    email = request.form['email']
+    skills = request.form['skills']
+    if file:
+        filename = secure_filename(file.filename)
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(file_path)
+        conn = get_db_connection()
+        conn.execute('INSERT INTO consultants (name, email, skills, resume_path) VALUES (?, ?, ?, ?)',
+                     (name, email, skills, file_path))
+        conn.commit()
+        conn.close()
+        return jsonify({'status': 'Consultant and resume added successfully'}), 201
 
-    conn = get_db_connection()
-    # Use an SQL INSERT command to add the new data to the table
-    conn.execute('INSERT INTO consultants (name, email, skills) VALUES (?, ?, ?)',
-                 (name, email, skills))
-    # Commit the transaction to save the changes permanently
-    conn.commit()
-    conn.close()
-    
-    # Return a success message and a "201 Created" status code
-    return jsonify({'status': 'Consultant added successfully'}), 201
-# --- NEW CODE ENDS HERE ---
+# --- NEW AI SEARCH ENDPOINT ---
+@app.route('/api/search', methods=['POST'])
+def search_resumes_endpoint():
+    search_query = request.get_json().get('query')
+    # Delegate the heavy lifting to our agent
+    results = resume_agent.search(search_query)
+    return jsonify(results)
 
 
 if __name__ == '__main__':
